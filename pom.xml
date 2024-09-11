@@ -23,6 +23,23 @@
           </descriptorRefs>
         </configuration>
       </plugin>
+      <plugin>
+            <groupId>org.xolstice.maven.plugins</groupId>
+            <artifactId>protobuf-maven-plugin</artifactId>
+            <version>0.6.1</version>
+            <configuration>
+              <protocArtifact>com.google.protobuf:protoc:3.21.1:exe:linux-x86_64</protocArtifact>
+              <protoSourceRoot>home/ubuntu/environment/ExemploRabbitMQ/src/main/proto</protoSourceRoot>
+              <outputDirectory>home/ubuntu/environment/ExemploRabbitMQ/generated-sources/protobuf</outputDirectory>
+            </configuration>
+            <executions>
+                <execution>
+                    <goals>
+                        <goal>compile</goal>
+                    </goals>
+                </execution>
+            </executions>
+        </plugin>
     </plugins>
   </build>
    <properties>
@@ -52,5 +69,10 @@
        <artifactId>slf4j-simple</artifactId>
        <version>1.7.30</version>
    </dependency>
+   <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-java</artifactId>
+        <version>3.21.1</version>
+    </dependency>
   </dependencies>
 </project>
