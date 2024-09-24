@@ -1,12 +1,19 @@
-//package br.ufs.dcomp.ExemploRabbitMQ; //idk if I'm gonna need this eventually, need to ask Tarcisio about it
+package br.ufs.dcomp.ExemploRabbitMQ;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.rabbitmq.client.*;
+
+import br.ufs.dcomp.ExemploRabbitMQ.MensagemProto.Conteudo;
+import br.ufs.dcomp.ExemploRabbitMQ.MensagemProto.Mensagem;
+
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.TimeZone;
-import your.package.generated.MensagemOuterClass.Mensagem;
-import com.google.protobuf;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.util.Base64;
+//import java.util.TimeZone;
 
 
 public class Chat{
@@ -21,7 +28,7 @@ public class Chat{
         this.username = username;
 
         ConnectionFactory factory = new ConnectionFactory();
-        factory.setHost("ec2-3-91-73-187.compute-1.amazonaws.com"); // REMINDER: Need to change this everytime I start the Lab, cuz the RabbitMQ's IP reset
+        factory.setHost("ec2-3-88-203-23.compute-1.amazonaws.com"); // REMINDER: Need to change this everytime I start the Lab, cuz the RabbitMQ's IP reset
         factory.setUsername("admin");
         factory.setPassword("password");
         factory.setVirtualHost("/");
@@ -37,9 +44,8 @@ public class Chat{
 
     private void startListening(String queueName) throws IOException{
         DeliverCallback deliverCallback = (consumerTag, delivery) ->{
-            String message = new String(delivery.getBody(), StandardCharsets.UTF_8);
-            byte[] mensagemBytes = message.getBytes();
-            handleMessage(mensagemBytes);
+            byte[] decoded = Base64.getDecoder().decode(delivery.getBody());
+            handleMessage(decoded);
         };
 
         channel.basicConsume(queueName, true, deliverCallback, consumerTag ->{});
@@ -48,15 +54,22 @@ public class Chat{
     private void handleMessage(byte[] messageBody) {
         try {
             Mensagem mensagem = Mensagem.parseFrom(messageBody);
+            
+            if (mensagem.getConteudo().getTipo().compareTo("text/plain") == 0) {
+                String output = String.format("(%s às %s) %s%s diz: %s",
+                    mensagem.getData(), mensagem.getHora(), 
+                    mensagem.getEmissor(), 
+                    mensagem.getGrupo().compareTo("") != 0 ? "#" + mensagem.getGrupo() : "",
+                    mensagem.getConteudo().getCorpo().toStringUtf8()
+                );
+                System.out.println("\n" + output);
+                System.out.print(getPrompt());
+            } else {
+                Thread thread = new Thread(new Receivable("testes", mensagem)); 
+                thread.start();
+            }
     
-            String output = String.format("(%s às %s) %s%s diz: %s",
-                mensagem.getData(), mensagem.getHora(), 
-                mensagem.getEmissor(), 
-                mensagem.hasGrupo() ? "#" + mensagem.getGrupo() : "",
-                mensagem.getConteudo().getCorpo().toStringUtf8()
-            );
-    
-            System.out.println(output);
+            
         } catch (InvalidProtocolBufferException e) {
             System.err.println("Erro ao deserializar a mensagem: " + e.getMessage());
         }
@@ -71,8 +84,7 @@ public class Chat{
             String input = br.readLine();
 
             if(input.startsWith("@")){
-                currentRecipient = input.substring(1);
-                
+                currentRecipient = input;
             } else if (input.startsWith("!addGroup")) {
                 String groupName = input.split(" ")[1];
                 createGroup(groupName);
@@ -82,8 +94,7 @@ public class Chat{
                 String groupName = parts[2];
                 addUserToGroup(user, groupName);
             } else if (input.startsWith("#")) {
-                currentRecipient = input.substring(1);
-                System.out.println("Grupo selecionado: " + currentRecipient);
+                currentRecipient = input;
             } else if (input.startsWith("!delFromGroup")) {
                 String[] parts = input.split(" ");
                 String user = parts[1];
@@ -92,32 +103,83 @@ public class Chat{
             } else if (input.startsWith("!removeGroup")) {
                 String groupName = input.split(" ")[1];
                 removeGroup(groupName);
+            } else if (input.startsWith("!upload")) {
+                String[] parts = input.split(" ");
+                String path = parts[1];
+                sendFile(path);
             } else {
                 sendMessage(input);
             }
         }
     }
 
+    private void sendFile(String path) throws IOException {
+        if (currentRecipient != null) {
+            SimpleDateFormat sdfData = new SimpleDateFormat("dd/MM/yyyy");
+            SimpleDateFormat sdfHora = new SimpleDateFormat("HH:mm:ss");
+            String dataAtual = sdfData.format(new Date());
+            String horaAtual = sdfHora.format(new Date());
+            String group = currentRecipient.startsWith("#") ? currentRecipient.substring(1) : "";
+            
+            Path source = Paths.get(path);
+            String tipoMime = Files.probeContentType(source);
+            byte[] bytes = Files.readAllBytes(source);
+            
+            ByteString byteString = ByteString.copyFrom(bytes);
+            
+            Conteudo conteudo = Conteudo.newBuilder()
+                .setTipo(tipoMime)
+                .setNome(source.getFileName().toString())
+                .setCorpo(byteString)
+                .build();
+        
+            Mensagem mensagem = Mensagem.newBuilder()
+                .setEmissor(username)
+                .setData(dataAtual)
+                .setHora(horaAtual)
+                .setConteudo(conteudo)
+                .setGrupo(group)
+                .build();
+        
+            byte[] mensagemBytes = mensagem.toByteArray();
+            byte[] encoded = Base64.getEncoder().encode(mensagemBytes);
+            
+            Thread thread = new Thread(new Sendable(encoded, currentRecipient, channel, group)); 
+            thread.start();
+        }
+    }
+
     private void sendMessage(String conteudoTexto) throws IOException {
-        SimpleDateFormat sdfData = new SimpleDateFormat("dd/MM/yyyy");
-        SimpleDateFormat sdfHora = new SimpleDateFormat("HH:mm:ss");
-        String dataAtual = sdfData.format(new Date());
-        String horaAtual = sdfHora.format(new Date());
-    
-        Mensagem.Conteudo conteudo = Mensagem.Conteudo.newBuilder()
-            .setTipo("text/plain")
-            .setCorpo(ByteString.copyFromUtf8(conteudoTexto))
-            .build();
-    
-        Mensagem mensagem = Mensagem.newBuilder()
-            .setEmissor(username)
-            .setData(dataAtual)
-            .setHora(horaAtual)
-            .setConteudo(conteudo)
-            .build();
-    
-        byte[] mensagemBytes = mensagem.toByteArray();
-        channel.basicPublish(EXCHANGE_NAME, routingKey, null, mensagemBytes);
+        if (currentRecipient != null) {
+            SimpleDateFormat sdfData = new SimpleDateFormat("dd/MM/yyyy");
+            SimpleDateFormat sdfHora = new SimpleDateFormat("HH:mm:ss");
+            String dataAtual = sdfData.format(new Date());
+            String horaAtual = sdfHora.format(new Date());
+            String group = currentRecipient.startsWith("#") ? currentRecipient.substring(1) : "";
+            
+            Conteudo conteudo = Conteudo.newBuilder()
+                .setTipo("text/plain")
+                .setCorpo(ByteString.copyFromUtf8(conteudoTexto))
+                .build();
+        
+            Mensagem mensagem = Mensagem.newBuilder()
+                .setEmissor(username)
+                .setData(dataAtual)
+                .setHora(horaAtual)
+                .setConteudo(conteudo)
+                .setGrupo(group)
+                .build();
+        
+            byte[] mensagemBytes = mensagem.toByteArray();
+            byte[] encoded = Base64.getEncoder().encode(mensagemBytes);
+            
+            // If receiver is a group send message to the group's exchange.
+            if (currentRecipient.startsWith("#")){
+                channel.basicPublish(group, "", null, encoded);
+            } else {
+                channel.basicPublish(EXCHANGE_NAME, currentRecipient.substring(1), null, encoded);
+            }
+        }
     }
 
     private void createGroup(String groupName) throws IOException {
@@ -136,7 +198,7 @@ public class Chat{
 
     private String getPrompt(){
         if(currentRecipient != null){
-            return "@" + currentRecipient + ">> ";
+            return currentRecipient + ">> ";
         } else{
             return ">> ";
         }
@@ -150,7 +212,7 @@ public class Chat{
 
     public static void main(String[] args) throws Exception{
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-        System.out.print("Enter your username: ");
+        System.out.print("User: ");
         String username = br.readLine();
         
         Chat chat = new Chat(username);

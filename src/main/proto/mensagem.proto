@@ -1,5 +1,10 @@
 syntax = "proto3";
 
+package ExemploRabbitMQ;
+
+option java_package = "br.ufs.dcomp.ExemploRabbitMQ";
+option java_outer_classname = "MensagemProto";
+
 message Mensagem {
     string emissor = 1; // Nome do emissor
     string data = 2; // Data de envio

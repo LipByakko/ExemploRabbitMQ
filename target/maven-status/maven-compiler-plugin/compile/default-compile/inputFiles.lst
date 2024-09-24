@@ -1,2 +1,4 @@
 /home/ubuntu/environment/ExemploRabbitMQ/src/main/java/br/ufs/dcomp/ExemploRabbitMQ/Chat.java
-/home/ubuntu/environment/ExemploRabbitMQ/src/main/java/MensagemOuterClass.java
+/home/ubuntu/environment/ExemploRabbitMQ/src/main/java/br/ufs/dcomp/ExemploRabbitMQ/Receivable.java
+/home/ubuntu/environment/ExemploRabbitMQ/src/main/java/br/ufs/dcomp/ExemploRabbitMQ/MensagemProto.java
+/home/ubuntu/environment/ExemploRabbitMQ/src/main/java/br/ufs/dcomp/ExemploRabbitMQ/Sendable.java
