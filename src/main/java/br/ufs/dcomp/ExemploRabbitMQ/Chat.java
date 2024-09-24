@@ -28,7 +28,7 @@ public class Chat{
         this.username = username;
 
         ConnectionFactory factory = new ConnectionFactory();
-        factory.setHost("ec2-3-88-203-23.compute-1.amazonaws.com"); // REMINDER: Need to change this everytime I start the Lab, cuz the RabbitMQ's IP reset
+        factory.setHost("load-balancer-514a88fa1c6c5cde.elb.us-east-1.amazonaws.com"); // REMINDER: Need to change this everytime I start the Lab, cuz the RabbitMQ's IP reset
         factory.setUsername("admin");
         factory.setPassword("password");
         factory.setVirtualHost("/");
