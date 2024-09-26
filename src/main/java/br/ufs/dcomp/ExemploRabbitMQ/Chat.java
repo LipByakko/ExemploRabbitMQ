@@ -7,13 +7,20 @@ import br.ufs.dcomp.ExemploRabbitMQ.MensagemProto.Conteudo;
 import br.ufs.dcomp.ExemploRabbitMQ.MensagemProto.Mensagem;
 
 import java.io.*;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.util.Base64;
-//import java.util.TimeZone;
 
 
 public class Chat{
@@ -48,8 +55,11 @@ public class Chat{
             byte[] decoded = Base64.getDecoder().decode(delivery.getBody());
             handleMessage(decoded);
         };
-
-        channel.basicConsume(queueName, true, deliverCallback, consumerTag ->{});
+        try {
+            channel.basicConsume(queueName, true, deliverCallback, consumerTag ->{});
+        } catch (Exception e){
+            System.out.println("Erro!");
+        }
     }
 
     private void handleMessage(byte[] messageBody) {
@@ -76,7 +86,7 @@ public class Chat{
         }
     }
 
-    public void startChat() throws IOException{
+    public void startChat() throws IOException, InterruptedException {
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
         System.out.println(">> Welcome to the chat!");
 
@@ -108,45 +118,54 @@ public class Chat{
                 String[] parts = input.split(" ");
                 String path = parts[1];
                 sendFile(path);
+            } else if (input.startsWith("!listGroups")){
+                listGroups();
+            } else if (input.startsWith("!listUsers")){
+                String groupName = input.split(" ")[1];
+                listUsers(groupName);
             } else {
                 sendMessage(input);
             }
         }
     }
 
-    private void sendFile(String path) throws IOException {
-        if (currentRecipient != null) {
-            SimpleDateFormat sdfData = new SimpleDateFormat("dd/MM/yyyy");
-            SimpleDateFormat sdfHora = new SimpleDateFormat("HH:mm:ss");
-            String dataAtual = sdfData.format(new Date());
-            String horaAtual = sdfHora.format(new Date());
-            String group = currentRecipient.startsWith("#") ? currentRecipient.substring(1) : "";
+    private void sendFile(String path) {
+        try {
+            if (currentRecipient != null) {
+                SimpleDateFormat sdfData = new SimpleDateFormat("dd/MM/yyyy");
+                SimpleDateFormat sdfHora = new SimpleDateFormat("HH:mm:ss");
+                String dataAtual = sdfData.format(new Date());
+                String horaAtual = sdfHora.format(new Date());
+                String group = currentRecipient.startsWith("#") ? currentRecipient.substring(1) : "";
+                
+                Path source = Paths.get(path);
+                String tipoMime = Files.probeContentType(source);
+                byte[] bytes = Files.readAllBytes(source);
+                
+                ByteString byteString = ByteString.copyFrom(bytes);
+                
+                Conteudo conteudo = Conteudo.newBuilder()
+                    .setTipo(tipoMime)
+                    .setNome(source.getFileName().toString())
+                    .setCorpo(byteString)
+                    .build();
             
-            Path source = Paths.get(path);
-            String tipoMime = Files.probeContentType(source);
-            byte[] bytes = Files.readAllBytes(source);
+                Mensagem mensagem = Mensagem.newBuilder()
+                    .setEmissor(username)
+                    .setData(dataAtual)
+                    .setHora(horaAtual)
+                    .setConteudo(conteudo)
+                    .setGrupo(group)
+                    .build();
             
-            ByteString byteString = ByteString.copyFrom(bytes);
-            
-            Conteudo conteudo = Conteudo.newBuilder()
-                .setTipo(tipoMime)
-                .setNome(source.getFileName().toString())
-                .setCorpo(byteString)
-                .build();
-        
-            Mensagem mensagem = Mensagem.newBuilder()
-                .setEmissor(username)
-                .setData(dataAtual)
-                .setHora(horaAtual)
-                .setConteudo(conteudo)
-                .setGrupo(group)
-                .build();
-        
-            byte[] mensagemBytes = mensagem.toByteArray();
-            byte[] encoded = Base64.getEncoder().encode(mensagemBytes);
-            
-            Thread thread = new Thread(new Sendable(encoded, currentRecipient, channel, group)); 
-            thread.start();
+                byte[] mensagemBytes = mensagem.toByteArray();
+                byte[] encoded = Base64.getEncoder().encode(mensagemBytes);
+                
+                Thread thread = new Thread(new Sendable(encoded, currentRecipient, channel, group)); 
+                thread.start();
+            }
+        } catch (Exception e){
+            System.out.println("Erro!");
         }
     }
 
@@ -175,26 +194,42 @@ public class Chat{
             byte[] encoded = Base64.getEncoder().encode(mensagemBytes);
             
             // If receiver is a group send message to the group's exchange.
-            if (currentRecipient.startsWith("#")){
-                channel.basicPublish(group, "", null, encoded);
-            } else {
-                channel.basicPublish(EXCHANGE_NAME, currentRecipient.substring(1), null, encoded);
+            try {
+                if (currentRecipient.startsWith("#")){
+                    channel.basicPublish(group, "", null, encoded);
+                } else {
+                    channel.basicPublish(EXCHANGE_NAME, currentRecipient.substring(1), null, encoded);
+                }
+            } catch (Exception e){
+                System.out.println("Erro!");
             }
         }
     }
 
     private void createGroup(String groupName) throws IOException {
-        channel.exchangeDeclare(groupName, BuiltinExchangeType.FANOUT);
+        try {
+            channel.exchangeDeclare(groupName, BuiltinExchangeType.FANOUT);
+        } catch (Exception e){
+            System.out.println("Erro!");
+        }
         addUserToGroup(username, groupName);
     }
     
     private void removeUserFromGroup(String user, String groupName) throws IOException {
         String queueName = QUEUE_PREFIX + user;
-        channel.queueUnbind(queueName, groupName, "");
+        try {
+            channel.queueUnbind(queueName, groupName, "");
+        } catch (Exception e){
+            System.out.println("Erro!");
+        }
     }
     
     private void removeGroup(String groupName) throws IOException {
-        channel.exchangeDelete(groupName);
+        try {
+            channel.exchangeDelete(groupName);
+        } catch (Exception e){
+            System.out.println("Erro!");
+        }
     }
 
     private String getPrompt(){
@@ -207,7 +242,63 @@ public class Chat{
     
     private void addUserToGroup(String user, String groupName) throws IOException {
         String queueName = QUEUE_PREFIX + user;
-        channel.queueBind(queueName, groupName, "");
+        try {
+            channel.queueBind(queueName, groupName, "");
+        } catch (Exception e){
+            System.out.println("Erro!");
+        }
+    }
+    
+    private void listGroups() throws IOException {
+        HttpClient client = HttpClient.newHttpClient();
+
+        String encoded = Base64.getEncoder().encodeToString("admin:password".getBytes());
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create("http://rabbit-balancer-3f0f4ffe25fcf3da.elb.us-east-1.amazonaws.com:15672/api/queues/%2f/" + QUEUE_PREFIX + username + "/bindings"))
+            .header("Authorization", "Basic " + encoded)
+            .GET()
+            .build();
+        HttpResponse<String> response;
+        try {
+            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            JSONArray jsonArray = new JSONArray(response.body());
+        
+            for (int i = 0; i < jsonArray.length(); i++) {
+                JSONObject jsonObject = jsonArray.getJSONObject(i);
+                String nomegrupo = jsonObject.getString("source");
+                if(!nomegrupo.contentEquals("") && !nomegrupo.contentEquals(EXCHANGE_NAME)){
+                    System.out.print(nomegrupo + " ");
+                }
+            }
+            System.out.println();
+        } catch (InterruptedException e) {
+            System.out.println("Erro!");
+        }
+    }
+    
+    private void listUsers(String groupName) throws IOException {
+        HttpClient client = HttpClient.newHttpClient();
+
+        String encoded = Base64.getEncoder().encodeToString("admin:password".getBytes());
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create("http://rabbit-balancer-3f0f4ffe25fcf3da.elb.us-east-1.amazonaws.com:15672/api/exchanges/%2f/" + groupName + "/bindings/source"))
+            .header("Authorization", "Basic " + encoded)
+            .GET()
+            .build();
+        HttpResponse<String> response;
+        try {
+            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            JSONArray jsonArray = new JSONArray(response.body());
+        
+            for (int i = 0; i < jsonArray.length(); i++) {
+                JSONObject jsonObject = jsonArray.getJSONObject(i);
+                String nomegrupo = jsonObject.getString("destination");
+                System.out.print(nomegrupo.split(QUEUE_PREFIX)[1] + " ");
+            }
+            System.out.println();
+        } catch (InterruptedException e) {
+            System.out.println("Erro!");
+        }
     }
 
 

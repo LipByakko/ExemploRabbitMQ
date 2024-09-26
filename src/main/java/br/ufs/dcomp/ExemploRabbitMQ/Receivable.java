@@ -37,8 +37,7 @@ public class Receivable implements Runnable{
             System.out.println("\n" + output);
             System.out.print(prompt);
         } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            System.out.println("Erro ao receber arquivo!");
         }
     }
     

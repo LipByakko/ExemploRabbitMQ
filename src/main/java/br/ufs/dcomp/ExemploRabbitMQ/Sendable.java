@@ -31,8 +31,7 @@ public class Sendable implements Runnable{
             System.out.println(currentRecipient + ">> ");
             
         } catch (IOException e) {
-            System.err.println("\nErro ao enviar arquivo: " + e.getMessage());
-            System.out.println(currentRecipient + ">> ");
+            System.err.println("\nErro ao enviar arquivo!");
         };
     }
 }
